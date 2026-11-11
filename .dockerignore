@@ -4,3 +4,6 @@ groups.json
 data
 __pycache__
 .venv
+*.pem
+*.sqlite3*
+*.db*

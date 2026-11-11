@@ -1,0 +1,23 @@
+{
+  "telegram": {
+    "REPLACE_CHAT_ID": {
+      "admins": [
+        "REPLACE_USER_ID"
+      ]
+    }
+  },
+  "max": {
+    "REPLACE_CHAT_ID": {
+      "admins": [
+        "REPLACE_USER_ID"
+      ]
+    }
+  },
+  "vk": {
+    "REPLACE_CHAT_ID": {
+      "admins": [
+        "REPLACE_USER_ID"
+      ]
+    }
+  }
+}

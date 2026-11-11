@@ -11,12 +11,12 @@ class CoreTests(unittest.TestCase):
     def tearDown(self):
         self.service.db.close()
     def test_scenario(self):
-        for command, admin, expected in json.loads(Path('scenario.json').read_text()):
+        for command, admin, expected in json.loads(Path(__file__).with_name('scenario.json').read_text()):
             with self.subTest(command=command):
                 result=self.service.execute('telegram','chat','alice',command,admin)
                 self.assertIn(expected,result)
     def test_chat_and_platform_isolation(self):
-        command, admin, expected = json.loads(Path('scenario.json').read_text())[0]
+        command, admin, expected = json.loads(Path(__file__).with_name('scenario.json').read_text())[0]
         self.service.execute('telegram','a','alice',command,admin)
         self.service.execute('telegram','b','alice','/help')
         self.service.execute('vk','a','alice','/help')
@@ -24,7 +24,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual('{}',rows[json.dumps(['telegram','b'])])
         self.assertEqual('{}',rows[json.dumps(['vk','a'])])
     def test_duplicate_event(self):
-        command, admin, _ = json.loads(Path('scenario.json').read_text())[0]
+        command, admin, _ = json.loads(Path(__file__).with_name('scenario.json').read_text())[0]
         first=self.service.execute('telegram','a','alice',command,admin,'100')
         self.assertIsNotNone(first)
         before=self.service.db.execute('SELECT data FROM chats').fetchall()
@@ -34,7 +34,7 @@ class CoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path=str(Path(folder)/'bot.db')
             one=Service(path)
-            command,admin,_=json.loads(Path('scenario.json').read_text())[0]
+            command,admin,_=json.loads(Path(__file__).with_name('scenario.json').read_text())[0]
             one.execute('telegram','a','alice',command,admin,'101')
             before=one.db.execute('SELECT data FROM chats').fetchall()
             one.db.close()
@@ -43,7 +43,7 @@ class CoreTests(unittest.TestCase):
             self.assertIsNone(two.execute('telegram','a','alice',command,admin,'101'))
             two.db.close()
     def test_admin_denied(self):
-        scenarios=json.loads(Path('scenario.json').read_text())
+        scenarios=json.loads(Path(__file__).with_name('scenario.json').read_text())
         admin_commands=[row for row in scenarios if row[1]]
         for command,_,_ in admin_commands:
             self.assertIn('Ошибка:',self.service.execute('telegram','x','stranger',command))

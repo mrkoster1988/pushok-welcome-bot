@@ -55,13 +55,17 @@ class Service:
         self.db = sqlite3.connect(path)
         self.db.execute('CREATE TABLE IF NOT EXISTS chats (scope TEXT PRIMARY KEY, data TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS events (platform TEXT, id TEXT, PRIMARY KEY(platform,id))')
+        self.db.execute('''CREATE TABLE IF NOT EXISTS outbox (
+            platform TEXT, id TEXT, chat TEXT NOT NULL, user TEXT NOT NULL,
+            reply TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+            PRIMARY KEY(platform,id))''')
         self.db.commit()
 
-    def execute(self, platform, chat, user, text, admin=False, event_id=None):
+    def execute(self, platform, chat, user, text, admin=False, event_id=None, enqueue_reply=False):
         if platform not in ('telegram', 'max', 'vk', 'demo'):
             raise ValueError('Неизвестная платформа')
-        if not isinstance(text, str) or len(text) > 3000:
-            return 'Команда должна быть не длиннее 3000 символов.'
+        if enqueue_reply and event_id is None:
+            raise ValueError('Для очереди ответа нужен ID события.')
         scope = json.dumps([platform, str(chat)])
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
@@ -69,8 +73,10 @@ class Service:
                 return None
             row = self.db.execute('SELECT data FROM chats WHERE scope=?', (scope,)).fetchone()
             state = json.loads(row[0]) if row else {}
-            cmd, _, arg = text.strip().partition(' ')
             try:
+                if not isinstance(text, str) or len(text) > 3000:
+                    raise ValueError('Команда должна быть не длиннее 3000 символов.')
+                cmd, _, arg = text.strip().partition(' ')
                 result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin)
                 if result is None:
                     result = 'Неизвестная команда. /help'
@@ -81,4 +87,9 @@ class Service:
                 self.db.execute('INSERT OR REPLACE INTO chats VALUES (?,?)', (scope, json.dumps(state, ensure_ascii=False)))
             if event_id is not None:
                 self.db.execute('INSERT INTO events VALUES (?,?)', (platform, str(event_id)))
-        return result[:3500]
+            result = result[:3500]
+            if enqueue_reply:
+                # Команда, ID события и текст ответа фиксируются одной транзакцией.
+                self.db.execute('INSERT INTO outbox(platform,id,chat,user,reply) VALUES (?,?,?,?,?)',
+                                (platform, str(event_id), str(chat), str(user), result))
+        return result

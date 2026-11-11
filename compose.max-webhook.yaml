@@ -1,0 +1,34 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
+    env_file: .env
+    command: ["python", "max_webhook.py", "worker"]
+    restart: unless-stopped
+    volumes:
+      - bot-data:/app/data
+      - ./groups.json:/app/groups.json:ro
+    healthcheck:
+      test: ["CMD", "python", "max_webhook.py", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+  receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile.webhook
+    env_file: .env
+    command: ["gunicorn", "max_webhook:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "25", "--error-logfile", "-"]
+    restart: unless-stopped
+    depends_on:
+      worker:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${MAX_WEBHOOK_PORT:-8080}:8080"
+    volumes:
+      - bot-data:/app/data
+      - ./groups.json:/app/groups.json:ro
+volumes:
+  bot-data:

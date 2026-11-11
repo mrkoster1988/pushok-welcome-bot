@@ -1,0 +1,2 @@
+# Закреплённый WSGI-сервер; установка только проверенного wheel.
+gunicorn==27.0.0 --hash=sha256:1380f2f520abc3beb9e72cd2e728bd2d08a19b3ff6ac03ebd8da71d1798a4008

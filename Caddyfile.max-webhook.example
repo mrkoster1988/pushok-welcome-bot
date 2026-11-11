@@ -1,0 +1,13 @@
+# Пример для Caddy, работающего НА ХОСТЕ. Добавьте сайт к существующей конфигурации.
+# Замените домен; если MAX_WEBHOOK_PORT изменён, замените и 8080.
+bot.example.org {
+    request_body {
+        max_size 65536
+    }
+    handle /webhooks/max {
+        reverse_proxy 127.0.0.1:8080
+    }
+    handle {
+        respond 404
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "REPLACE_CHAT_ID": {
+    "admins": [
+      "REPLACE_USER_ID"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+.env
+groups.json
+data/
+*.sqlite3*
+*.db*
+__pycache__/
+.venv/

@@ -1,0 +1,6 @@
+.git
+.env
+groups.json
+data
+__pycache__
+.venv

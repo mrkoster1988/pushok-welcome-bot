@@ -3,6 +3,6 @@ WORKDIR /app
 COPY requirements-webhook.txt ./
 RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements-webhook.txt
 RUN useradd --uid 10001 --create-home bot && mkdir /app/data && chown bot /app/data
-COPY --chown=bot:bot core.py domain.py main.py settings.py transports.py max_webhook.py ./
+COPY --chown=bot:bot core.py domain.py main.py settings.py transports.py maintenance.py PROJECT_ID VERSION max_webhook.py ./
 USER bot
 CMD ["python", "max_webhook.py", "worker"]

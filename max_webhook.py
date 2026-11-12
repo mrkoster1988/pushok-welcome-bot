@@ -13,6 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import urlsplit
 from core import Service
+from maintenance import require_active_db
 from main import bind_identity, metadata
 from settings import credentials, load_groups
 from transports import Event, Max, TransportError, numeric_id
@@ -148,11 +149,13 @@ def create_app():
     groups = load_groups(os.environ.get('GROUPS_FILE', 'groups.json'), 'max')
     secret = secret_from_env(os.environ)
     transport = transport_from_env(os.environ)
+    inbox = Inbox(db_path(os.environ))
+    with inbox.connect() as db:
+        require_active_db(db)
     me = transport.api('me')
     identity = numeric_id(me.get('user_id'), positive=True)
     if not identity:
         raise ValueError('MAX не вернул идентификатор бота.')
-    inbox = Inbox(db_path(os.environ))
     with inbox.connect() as db:
         row = db.execute("SELECT value FROM transport_meta WHERE key='max:identity'").fetchone()
     if row is None or json.loads(row[0]) != identity:
@@ -216,6 +219,7 @@ def run_worker():
             raise ValueError('База уже занята: остановите polling или второй worker.') from None
         service = Service(path)
         try:
+            require_active_db(service.db)
             me = transport.api('me')
             identity = numeric_id(me.get('user_id'), positive=True)
             if not identity:

@@ -7,6 +7,7 @@ import os
 import time
 from pathlib import Path
 from core import Service
+from maintenance import require_active_db
 from settings import PLATFORMS, credentials, load_groups
 from transports import Max, Telegram, TransportError, Vk, normalize
 
@@ -95,6 +96,7 @@ def run():
             raise ValueError('Эта база уже используется другим процессом.') from None
         service = Service(db_path)
         try:
+            require_active_db(service.db)
             identity = transport.start()
             bind_identity(service, platform, identity)
             cursor = metadata(service, platform + ':cursor')

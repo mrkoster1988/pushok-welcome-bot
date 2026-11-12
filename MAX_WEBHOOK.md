@@ -1,4 +1,4 @@
-# MAX webhook — 0.1.0-alpha.3
+# MAX webhook — 0.1.0-alpha.4
 
 Реализованы приём HTTPS-событий через обратный прокси, проверка секрета, SQLite-очередь
 и отдельный обработчик команд. Токен, настоящий домен и доставка в MAX ещё не проверены.
@@ -101,6 +101,7 @@ docker compose -f compose.max-webhook.yaml logs --tail=50 worker receiver
 | outbox pending / sending | Ответ ждёт отправки / начата попытка отправки |
 | outbox sent | API подтвердил отправку; проверьте сообщение в чате |
 | outbox uncertain | Исход попытки неизвестен; проверьте чат перед ручными действиями |
+| inbox/outbox held | Старая очередь после восстановления: удержана для ручного разбора |
 | outbox cancelled | Чат удалён из разрешённых; отложенный ответ отменён |
 
 Приёмка: `/help`, сценарий из `scenario.json`, отказ обычному участнику в админ-команде,
@@ -127,3 +128,5 @@ HTTP 200 для подходящей команды возвращается п�
 
 Официальные источники: [MAX webhook](https://dev.max.ru/docs-api/methods/POST/subscriptions),
 [Gunicorn](https://gunicorn.org/quickstart/), [Caddy reverse_proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
+
+Резервная копия и безопасный переход на восстановленную базу: [BACKUP.md](BACKUP.md).

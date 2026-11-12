@@ -5,9 +5,20 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m unittest discover -v
+      - name: Unit and recovery tests
+        run: python -m unittest discover -v
+      - name: Build polling image
+        run: docker build --tag pushok-bot-ci .
+      - name: Build webhook image
+        run: docker build --file Dockerfile.webhook --tag pushok-webhook-ci .
+      - name: Offline container recovery smoke
+        run: |
+          docker run --rm --network none -i --entrypoint python pushok-bot-ci - < smoke_container.py
+          docker run --rm --network none -i --entrypoint python pushok-webhook-ci - webhook < smoke_container.py
+          docker run --rm --network none --entrypoint gunicorn pushok-webhook-ci --version

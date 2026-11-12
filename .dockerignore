@@ -7,3 +7,8 @@ __pycache__
 *.pem
 *.sqlite3*
 *.db*
+
+backups/
+*.zip
+.pushok-backup-*/
+.pushok-restore-*/

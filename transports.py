@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from menu import callback_command,label_command,telegram_keyboard,max_keyboard,vk_keyboard
 
 
 class TransportError(RuntimeError):
@@ -81,6 +82,7 @@ class Event:
     text: str
     id: str
     kind: str = 'command'
+    callback_id: str | None = None
 
 
 def normalize(update, username):
@@ -114,15 +116,28 @@ class Telegram:
         if hook.get('url'):
             raise TransportError('Telegram: уже настроен webhook. Нужен отдельный бот без webhook.')
         self.username = me['username']
+        self.bot_id = str(me['id'])
         return str(me['id'])
 
     def poll(self, cursor):
-        updates = self.api('getUpdates', {'offset': cursor or 0, 'timeout': 25, 'allowed_updates': ['message']})
+        updates = self.api('getUpdates', {'offset': cursor or 0, 'timeout': 25, 'allowed_updates': ['message','callback_query']})
         if not isinstance(updates, list) or any(type(obj(x).get('update_id')) is not int for x in updates):
             raise TransportError('Telegram: неверный формат событий.')
         return updates, max(x['update_id'] for x in updates) + 1 if updates else cursor
 
     def normalize(self, update):
+        callback=obj(obj(update).get('callback_query'))
+        if callback:
+            message=obj(callback.get('message'));chat_obj=obj(message.get('chat'));actor=obj(callback.get('from'))
+            chat=numeric_id(chat_obj.get('id'));user=numeric_id(actor.get('id'),positive=True)
+            text=callback_command(callback.get('data'));key=callback.get('id')
+            sender=obj(message.get('from'))
+            if (chat and user and actor.get('is_bot') is False and text and chat_obj.get('type') in ('group','supergroup')
+                    and isinstance(key,str) and 0<len(key)<=128 and not any(c.isspace() for c in key)
+                    and sender.get('is_bot') is True and numeric_id(sender.get('id'),positive=True)==getattr(self,'bot_id',None)
+                    and getattr(self,'bot_id',None) is not None):
+                return Event(chat,user,text,'callback:'+key,callback_id=key)
+            return None
         message = obj(obj(update).get('message'))
         chat_object = obj(message.get('chat'))
         members = message.get('new_chat_members')
@@ -141,7 +156,10 @@ class Telegram:
         return Event(*result, str(update['update_id'])) if result else None
 
     def send(self, event, text):
-        self.api('sendMessage', {'chat_id': event.chat, 'text': text})
+        self.api('sendMessage', {'chat_id': event.chat, 'text': text,'reply_markup':telegram_keyboard()})
+
+    def acknowledge(self,event):
+        self.api('answerCallbackQuery',{'callback_query_id':event.callback_id})
 
 
 class Max:
@@ -197,14 +215,14 @@ class Max:
             return None
         chat = numeric_id(recipient.get('chat_id'))
         user = numeric_id(sender.get('user_id'), positive=True)
-        text = command_text(body.get('text'), getattr(self, 'username', None))
+        text = command_text(body.get('text'), getattr(self, 'username', None)) or label_command(body.get('text'))
         mid = body.get('mid')
         if chat and user and text and isinstance(mid, str) and mid:
             return Event(chat, user, text, mid)
         return None
 
     def send(self, event, text):
-        self.api('messages', method='POST', query={'chat_id': event.chat}, body={'text': text})
+        self.api('messages', method='POST', query={'chat_id': event.chat}, body={'text': text,'attachments':max_keyboard()})
 
 
 class Vk:
@@ -261,7 +279,7 @@ class Vk:
         message = obj(obj(update.get('object')).get('message'))
         chat = numeric_id(message.get('peer_id'), positive=True)
         user = numeric_id(message.get('from_id'), positive=True)
-        text = command_text(message.get('text'))
+        text = command_text(message.get('text')) or label_command(message.get('text'))
         action = obj(message.get('action'))
         joining = action.get('type') in ('chat_invite_user','chat_invite_user_by_link')
         member = numeric_id(action.get('member_id'),positive=True) if joining else None
@@ -281,4 +299,4 @@ class Vk:
 
     def send(self, event, text):
         random_id = int.from_bytes(hashlib.sha256(event.id.encode()).digest()[:4], 'big') & 0x7fffffff
-        self.api('messages.send', {'peer_id': event.chat, 'message': text, 'random_id': random_id or 1})
+        self.api('messages.send', {'peer_id': event.chat, 'message': text, 'random_id': random_id or 1,'keyboard':vk_keyboard()})

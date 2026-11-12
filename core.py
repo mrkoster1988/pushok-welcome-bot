@@ -91,7 +91,7 @@ class Service:
                     result = handle_join(state,self.clock())
                 else:
                     cmd, _, arg = text.strip().partition(' ')
-                    result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin)
+                    result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin,now=self.clock())
                     if result is None:
                         result = 'Неизвестная команда. /help'
             except (ValueError, KeyError, IndexError) as exc:

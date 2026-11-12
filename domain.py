@@ -2,7 +2,8 @@
 import re
 from guard import DEFAULT_LIMIT
 
-HELP = '''/rules — правила
+HELP = '''/menu — меню с кнопками
+/rules — правила
 /agree — принять текущие правила
 /mine — моё согласие
 /faq [страница] — список вопросов
@@ -20,7 +21,9 @@ HELP = '''/rules — правила
 /welcomeoff — выключить автоприветствие
 /welcomecooldown секунды — пауза между приветствиями
 /setlimit число — команд участника за минуту, 0 отключает
-/setup — проверить настройки чата'''
+/setup — проверить настройки чата
+/wizard — пошаговая настройка
+/step текст, /skip, /back, /apply, /cancel — команды мастера'''
 DEFAULT_WELCOME = 'Добро пожаловать в группу!\nПравила: /rules\nЧастые вопросы: /faq\nПосле прочтения правил: /agree'
 PAGE_SIZE = 5
 FAQ_LIMIT = 100
@@ -64,8 +67,13 @@ def handle_join(state, now):
     return welcome_text(state)
 
 
-def handle(s, u, cmd, arg, admin):
+def handle(s, u, cmd, arg, admin, now=None):
     from core import require_admin
+    from wizard import COMMANDS,handle as wizard_handle
+
+    if cmd in COMMANDS or cmd=='/draft':
+        return wizard_handle(s,u,cmd,arg,admin,now)
+    if cmd=='/menu':return 'Выберите действие кнопками под сообщением. Команды также доступны: /help.'
 
     if cmd == '/setup':
         require_admin(admin)

@@ -30,6 +30,13 @@ with tempfile.TemporaryDirectory(dir='data') as folder:
         assert service.execute('max','-100','43','',event_id='smoke-join',kind='join') is None
         assert service.execute('max','-100','44','',event_id='smoke-cooldown',kind='join') is None
         assert '20 за минуту' in service.execute('max','-100','42','/setup',True)
+        assert '1/6' in service.execute('max','-100','42','/wizard',True)
+        service.execute('max','-100','42','/step Правила из мастера',True)
+        for _ in range(5):service.execute('max','-100','42','/skip',True)
+        assert 'сохранены' in service.execute('max','-100','42','/apply',True)
+        assert service.execute('max','-100','42','/rules')=='Правила из мастера'
+        from menu import telegram_keyboard,max_keyboard,vk_keyboard
+        assert telegram_keyboard()['inline_keyboard'] and max_keyboard() and vk_keyboard()
         backup(source,archive)
         assert verify(archive)['verified']
         restore(archive,target)

@@ -167,7 +167,8 @@ class TransportTests(unittest.TestCase):
         self.assertEqual('https://platform-api2.max.ru/messages', args[0])
         self.assertEqual({'Authorization': 'SENTINEL'}, kwargs['headers'])
         self.assertEqual({'chat_id': '-100'}, kwargs['query'])
-        self.assertEqual({'text': 'Привет'}, kwargs['body'])
+        self.assertEqual('Привет', kwargs['body']['text'])
+        self.assertEqual('inline_keyboard',kwargs['body']['attachments'][0]['type'])
         self.assertNotIn('SENTINEL', args[0])
 
     def test_max_webhook_blocks_polling_without_changing_subscription(self):

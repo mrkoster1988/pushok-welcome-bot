@@ -38,6 +38,9 @@ def process_update(service, transport, groups, update, *, deliver=True):
         return
     service.execute(transport.platform, event.chat, event.user, event.text,
                     event.user in groups[event.chat]['admins'], event.id,enqueue_reply=True,kind=event.kind)
+    if event.callback_id:
+        try:transport.acknowledge(event)
+        except TransportError:logging.warning('Telegram: нажатие обработано, но закрытие индикатора не подтверждено.')
     if deliver:
         drain(service,transport,groups)
 

@@ -36,7 +36,7 @@ def process_update(service, transport, groups, update):
     if event is None or event.chat not in groups:
         return
     reply = service.execute(transport.platform, event.chat, event.user, event.text,
-                            event.user in groups[event.chat]['admins'], event.id)
+                            event.user in groups[event.chat]['admins'], event.id,kind=event.kind)
     if reply:
         try:
             transport.send(event, reply)

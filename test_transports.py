@@ -182,7 +182,7 @@ class TransportTests(unittest.TestCase):
         transport.api = Mock(return_value={'updates': [], 'marker': 201})
         self.assertEqual(([],201), transport.poll(200))
         self.assertEqual(200, transport.api.call_args.kwargs['query']['marker'])
-        self.assertEqual('message_created', transport.api.call_args.kwargs['query']['types'])
+        self.assertEqual('message_created,user_added', transport.api.call_args.kwargs['query']['types'])
 
     @patch('transports.http_json')
     def test_vk_send_uses_form_token_and_stable_random_id(self, request):

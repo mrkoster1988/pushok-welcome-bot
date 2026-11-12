@@ -20,6 +20,12 @@ with tempfile.TemporaryDirectory(dir='data') as folder:
         bind_identity(service,'max','123')
         require_active_db(service.db)
         service.execute('max','-100','42','/help',True,'smoke',enqueue_reply=True)
+        service.execute('max','-100','42','/faqadd Где правила? | /rules',True)
+        assert '/rules' in service.execute('max','-100','42','/answer 1')
+        service.execute('max','-100','42','/welcomeon',True)
+        greeting=service.execute('max','-100','43','',event_id='smoke-join',enqueue_reply=True,kind='join')
+        assert 'Добро пожаловать' in greeting
+        assert service.execute('max','-100','43','',event_id='smoke-join',kind='join') is None
         backup(source,archive)
         assert verify(archive)['verified']
         restore(archive,target)
@@ -30,6 +36,6 @@ with tempfile.TemporaryDirectory(dir='data') as folder:
         activate(target,True)
         with sqlite3.connect(target) as db:
             require_active_db(db)
-            assert db.execute('SELECT status FROM outbox').fetchone()[0]=='held'
+            assert db.execute('SELECT status FROM outbox').fetchall()==[('held',),('held',)]
     finally:service.db.close()
-print('Container smoke OK: non-root, writable data, project/version, backup/verify/restore/activate; network disabled')
+print('Container smoke OK: non-root, FAQ, welcome, deduplication, backup/restore; network disabled')

@@ -80,6 +80,7 @@ class Event:
     user: str
     text: str
     id: str
+    kind: str = 'command'
 
 
 def normalize(update, username):
@@ -122,6 +123,20 @@ class Telegram:
         return updates, max(x['update_id'] for x in updates) + 1 if updates else cursor
 
     def normalize(self, update):
+        message = obj(obj(update).get('message'))
+        chat_object = obj(message.get('chat'))
+        members = message.get('new_chat_members')
+        if isinstance(members,list):
+            chat = numeric_id(chat_object.get('id'))
+            update_id = obj(update).get('update_id')
+            if chat_object.get('type') not in ('group','supergroup') or not chat or type(update_id) is not int or update_id<0:
+                return None
+            # Одно приветствие на служебное сообщение, даже если добавили несколько людей.
+            for member in members:
+                user = numeric_id(obj(member).get('id'),positive=True)
+                if user and obj(member).get('is_bot') is False:
+                    return Event(chat,user,'',str(update_id),kind='join')
+            return None
         result = normalize(update, self.username)
         return Event(*result, str(update['update_id'])) if result else None
 
@@ -154,7 +169,7 @@ class Max:
         return str(me['user_id'])
 
     def poll(self, cursor):
-        query = {'timeout': 25, 'limit': 100, 'types': 'message_created'}
+        query = {'timeout': 25, 'limit': 100, 'types': 'message_created,user_added'}
         if cursor is not None:
             query['marker'] = cursor
         data = self.api('updates', query=query)
@@ -163,6 +178,16 @@ class Max:
         return data['updates'], data['marker'] if data['marker'] is not None else cursor
 
     def normalize(self, update):
+        if obj(update).get('update_type') == 'user_added':
+            chat = numeric_id(update.get('chat_id'))
+            member = obj(update.get('user'))
+            user = numeric_id(member.get('user_id'),positive=True)
+            stamp = update.get('timestamp')
+            if (chat and user and member.get('is_bot') is False and update.get('is_channel') is False
+                    and type(stamp) is int and 0<=stamp<2**63):
+                # В user_added нет mid: ключ из типа, чата, пользователя и времени события.
+                return Event(chat,user,'',f'join:{chat}:{user}:{stamp}',kind='join')
+            return None
         if obj(update).get('update_type') != 'message_created':
             return None
         message = obj(update.get('message'))
@@ -237,14 +262,22 @@ class Vk:
         chat = numeric_id(message.get('peer_id'), positive=True)
         user = numeric_id(message.get('from_id'), positive=True)
         text = command_text(message.get('text'))
-        if not chat or not user or not text or message.get('out') or message.get('action'):
+        action = obj(message.get('action'))
+        joining = action.get('type') in ('chat_invite_user','chat_invite_user_by_link')
+        member = numeric_id(action.get('member_id'),positive=True) if joining else None
+        if joining:
+            # Без явного member_id событие не угадываем; сообщества имеют отрицательные ID.
+            if not chat or int(chat)<=2000000000 or not member or message.get('out'):
+                return None
+            user,text = member,''
+        elif not chat or not user or not text or message.get('out') or message.get('action'):
             return None
         cmid = numeric_id(message.get('conversation_message_id'), positive=True)
         mid = numeric_id(message.get('id'), positive=True)
         # ID обязательно привязан к беседе: одинаковый cmid бывает в разных чатах.
         event_id = f'{self.group_id}:{chat}:cmid:{cmid}' if cmid else (
             f'{self.group_id}:{chat}:id:{mid}' if mid else None)
-        return Event(chat, user, text, event_id) if event_id else None
+        return Event(chat, user, text, event_id,kind='join' if joining else 'command') if event_id else None
 
     def send(self, event, text):
         random_id = int.from_bytes(hashlib.sha256(event.id.encode()).digest()[:4], 'big') & 0x7fffffff

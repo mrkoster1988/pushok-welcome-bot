@@ -3,7 +3,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from domain import handle, HELP
+from domain import handle, handle_join, HELP
 
 
 class UserError(Exception):
@@ -61,11 +61,13 @@ class Service:
             PRIMARY KEY(platform,id))''')
         self.db.commit()
 
-    def execute(self, platform, chat, user, text, admin=False, event_id=None, enqueue_reply=False):
+    def execute(self, platform, chat, user, text, admin=False, event_id=None, enqueue_reply=False, kind='command'):
         if platform not in ('telegram', 'max', 'vk', 'demo'):
             raise ValueError('Неизвестная платформа')
         if enqueue_reply and event_id is None:
             raise ValueError('Для очереди ответа нужен ID события.')
+        if kind not in ('command','join') or (kind=='join' and event_id is None):
+            raise ValueError('Неизвестный тип события или отсутствует ID вступления.')
         scope = json.dumps([platform, str(chat)])
         with self.db:
             self.db.execute('BEGIN IMMEDIATE')
@@ -76,10 +78,13 @@ class Service:
             try:
                 if not isinstance(text, str) or len(text) > 3000:
                     raise ValueError('Команда должна быть не длиннее 3000 символов.')
-                cmd, _, arg = text.strip().partition(' ')
-                result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin)
-                if result is None:
-                    result = 'Неизвестная команда. /help'
+                if kind == 'join':
+                    result = handle_join(state)
+                else:
+                    cmd, _, arg = text.strip().partition(' ')
+                    result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin)
+                    if result is None:
+                        result = 'Неизвестная команда. /help'
             except (ValueError, KeyError, IndexError) as exc:
                 # Частично изменённое состояние не сохраняется при ошибке команды.
                 result = 'Ошибка: ' + (str(exc) if isinstance(exc, ValueError) else 'Проверьте параметры: /help')
@@ -87,8 +92,8 @@ class Service:
                 self.db.execute('INSERT OR REPLACE INTO chats VALUES (?,?)', (scope, json.dumps(state, ensure_ascii=False)))
             if event_id is not None:
                 self.db.execute('INSERT INTO events VALUES (?,?)', (platform, str(event_id)))
-            result = result[:3500]
-            if enqueue_reply:
+            result = result[:3500] if result is not None else None
+            if enqueue_reply and result is not None:
                 # Команда, ID события и текст ответа фиксируются одной транзакцией.
                 self.db.execute('INSERT INTO outbox(platform,id,chat,user,reply) VALUES (?,?,?,?,?)',
                                 (platform, str(event_id), str(chat), str(user), result))

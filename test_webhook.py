@@ -210,7 +210,7 @@ class WebhookTests(unittest.TestCase):
     def test_register_payload_and_confirmation(self):
         self.transport.api.side_effect = [{'subscriptions':[]},{'success':True}]
         register(self.transport,'https://example.org/webhooks/max',SECRET)
-        self.assertEqual({'url':'https://example.org/webhooks/max','secret':SECRET,'update_types':['message_created']},
+        self.assertEqual({'url':'https://example.org/webhooks/max','secret':SECRET,'update_types':['message_created','user_added']},
                          self.transport.api.call_args.kwargs['body'])
 
 

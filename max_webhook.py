@@ -177,7 +177,7 @@ def worker_tick(service, transport, inbox, groups):
             event = Event(**json.loads(payload))
             if event.chat in groups:
                 service.execute('max', event.chat, event.user, event.text,
-                                event.user in groups[event.chat]['admins'], event.id, enqueue_reply=True)
+                                event.user in groups[event.chat]['admins'], event.id, enqueue_reply=True,kind=event.kind)
             with service.db:
                 service.db.execute("UPDATE webhook_inbox SET status='done',event='{}' WHERE id=?", (event_id,))
         except Exception:
@@ -247,7 +247,7 @@ def register(transport, url, secret):
         raise ValueError('Не удалось проверить существующие подписки.')
     if any(row.get('url') != url for row in existing):
         raise ValueError('У бота уже есть подписка на другой адрес. Она не изменена; используйте отдельного бота.')
-    result = transport.api('subscriptions',method='POST',body={'url':url,'update_types':['message_created'],'secret':secret})
+    result = transport.api('subscriptions',method='POST',body={'url':url,'update_types':['message_created','user_added'],'secret':secret})
     if result.get('success') is not True:
         raise TransportError('MAX не подтвердил регистрацию webhook.')
 

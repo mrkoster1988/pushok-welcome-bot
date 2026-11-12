@@ -4,7 +4,9 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from unittest.mock import Mock
 from core import Service
+from delivery import drain,prune,recover_interrupted_sends,status
 from main import bind_identity
 from maintenance import activate,backup,project_id,require_active_db,restore,verify
 
@@ -26,6 +28,8 @@ with tempfile.TemporaryDirectory(dir='data') as folder:
         greeting=service.execute('max','-100','43','',event_id='smoke-join',enqueue_reply=True,kind='join')
         assert 'Добро пожаловать' in greeting
         assert service.execute('max','-100','43','',event_id='smoke-join',kind='join') is None
+        assert service.execute('max','-100','44','',event_id='smoke-cooldown',kind='join') is None
+        assert '20 за минуту' in service.execute('max','-100','42','/setup',True)
         backup(source,archive)
         assert verify(archive)['verified']
         restore(archive,target)
@@ -37,5 +41,17 @@ with tempfile.TemporaryDirectory(dir='data') as folder:
         with sqlite3.connect(target) as db:
             require_active_db(db)
             assert db.execute('SELECT status FROM outbox').fetchall()==[('held',),('held',)]
+        for platform in ('telegram','vk'):
+            transport=Mock(platform=platform)
+            service.execute(platform,'-100','42','/help',True,'queued',enqueue_reply=True)
+            drain(service,transport,{'-100':{'admins':['42']}})
+            transport.send.assert_called_once()
+            assert status(service.db,platform)['outbox']=={'sent':1}
+            with service.db:prune(service.db,platform,0,True)
+            assert service.execute(platform,'-100','42','/help',True,'queued',enqueue_reply=True) is None
+        service.execute('telegram','-100','42','/setlimit 1',True)
+        assert service.execute('telegram','-100','99','/help')
+        assert 'Слишком много' in service.execute('telegram','-100','99','/help')
+        assert service.execute('telegram','-100','99','/help') is None
     finally:service.db.close()
-print('Container smoke OK: non-root, FAQ, welcome, deduplication, backup/restore; network disabled')
+print('Container smoke OK: non-root, FAQ, welcome cooldown, polling queue, pruning, quota, backup/restore; network disabled')

@@ -13,6 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.parse import urlsplit
 from core import Service
+from delivery import recover_interrupted_sends, send_next
 from maintenance import require_active_db
 from main import bind_identity, metadata
 from settings import credentials, load_groups
@@ -163,11 +164,6 @@ def create_app():
     return WebhookApp(inbox, groups, secret, me.get('username'))
 
 
-def recover_interrupted_sends(service):
-    with service.db:
-        service.db.execute("UPDATE outbox SET status='uncertain' WHERE platform='max' AND status='sending'")
-
-
 def worker_tick(service, transport, inbox, groups):
     metadata(service, 'max:webhook_heartbeat', time.time(), write=True)
     row = service.db.execute("SELECT id,event,attempts FROM webhook_inbox WHERE status='pending' ORDER BY received_at,rowid LIMIT 1").fetchone()
@@ -186,22 +182,7 @@ def worker_tick(service, transport, inbox, groups):
                 service.db.execute('UPDATE webhook_inbox SET attempts=attempts+1,status=? WHERE id=?',
                                    ('failed' if attempts >= 2 else 'pending', event_id))
             logging.error('MAX worker: ошибка обработки; детали события скрыты. Проверьте status.')
-    reply = service.db.execute("SELECT id,chat,user,reply FROM outbox WHERE platform='max' AND status='pending' ORDER BY rowid LIMIT 1").fetchone()
-    if reply:
-        event_id, chat, user, text = reply
-        # При удалении чата из allowlist отложенные ответы туда больше не уходят.
-        state = 'sending' if chat in groups else 'cancelled'
-        with service.db:
-            service.db.execute("UPDATE outbox SET status=? WHERE platform='max' AND id=?", (state,event_id))
-        if state == 'sending':
-            try:
-                transport.send(Event(chat,user,'',event_id),text)
-                state = 'sent'
-            except Exception:
-                state = 'uncertain'
-                logging.error('MAX: отправка не подтверждена. Автоматический повтор отключён; проверьте status.')
-            with service.db:
-                service.db.execute("UPDATE outbox SET status=? WHERE platform='max' AND id=?", (state,event_id))
+    reply = send_next(service,transport,groups,platform='max')
     metadata(service, 'max:webhook_heartbeat', time.time(), write=True)
     return row is not None or reply is not None
 

@@ -7,6 +7,7 @@ import os
 import time
 from pathlib import Path
 from core import Service
+from delivery import drain, recover_interrupted_sends
 from maintenance import require_active_db
 from settings import PLATFORMS, credentials, load_groups
 from transports import Max, Telegram, TransportError, Vk, normalize
@@ -31,26 +32,25 @@ def bind_identity(service, platform, identity):
     metadata(service, key, identity, write=True)
 
 
-def process_update(service, transport, groups, update):
+def process_update(service, transport, groups, update, *, deliver=True):
     event = transport.normalize(update)
     if event is None or event.chat not in groups:
         return
-    reply = service.execute(transport.platform, event.chat, event.user, event.text,
-                            event.user in groups[event.chat]['admins'], event.id,kind=event.kind)
-    if reply:
-        try:
-            transport.send(event, reply)
-        except TransportError:
-            # Не повторяем отправку с неизвестным исходом. Состояние команды уже сохранено.
-            logging.error('%s: ответ не подтверждён; команда сохранена. Проверьте права и доступность API.', transport.platform)
+    service.execute(transport.platform, event.chat, event.user, event.text,
+                    event.user in groups[event.chat]['admins'], event.id,enqueue_reply=True,kind=event.kind)
+    if deliver:
+        drain(service,transport,groups)
 
 
 def poll_once(service, transport, groups, cursor):
+    # Старые pending отправляются даже при последующем сбое получения событий.
+    drain(service,transport,groups)
     updates, next_cursor = transport.poll(cursor)
     for update in updates:
-        process_update(service, transport, groups, update)
+        process_update(service, transport, groups, update,deliver=False)
     # При аварии раньше этой точки событие придёт снова, но Service не применит его повторно.
     metadata(service, transport.platform + ':cursor', next_cursor, write=True)
+    drain(service,transport,groups)
     return next_cursor
 
 
@@ -99,6 +99,7 @@ def run():
             require_active_db(service.db)
             identity = transport.start()
             bind_identity(service, platform, identity)
+            recover_interrupted_sends(service,platform)
             cursor = metadata(service, platform + ':cursor')
             logging.info('%s polling запущен. Доставку подтвердите в тестовом чате.', platform)
             while True:

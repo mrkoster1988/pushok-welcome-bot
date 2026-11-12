@@ -1,5 +1,6 @@
 """Правила, FAQ и приветствие участников: настройки изолированы по чату и платформе."""
 import re
+from guard import DEFAULT_LIMIT
 
 HELP = '''/rules — правила
 /agree — принять текущие правила
@@ -16,7 +17,10 @@ HELP = '''/rules — правила
 /faqdel ID — удалить FAQ
 /setwelcome текст — изменить приветствие
 /welcomeon — включить автоприветствие
-/welcomeoff — выключить автоприветствие'''
+/welcomeoff — выключить автоприветствие
+/welcomecooldown секунды — пауза между приветствиями
+/setlimit число — команд участника за минуту, 0 отключает
+/setup — проверить настройки чата'''
 DEFAULT_WELCOME = 'Добро пожаловать в группу!\nПравила: /rules\nЧастые вопросы: /faq\nПосле прочтения правил: /agree'
 PAGE_SIZE = 5
 FAQ_LIMIT = 100
@@ -48,14 +52,41 @@ def welcome_text(state):
     return state.get('welcome_text',DEFAULT_WELCOME)
 
 
-def handle_join(state):
+def handle_join(state, now):
     # Никакого автоматического согласия с правилами или выдачи прав при вступлении.
-    return welcome_text(state) if state.get('welcome_enabled') is True else None
+    if state.get('welcome_enabled') is not True:
+        return None
+    previous = state.get('_welcome_last_at')
+    cooldown = state.get('welcome_cooldown',30)
+    if previous is not None and 0 <= now-previous < cooldown:
+        return None
+    state['_welcome_last_at'] = now
+    return welcome_text(state)
 
 
 def handle(s, u, cmd, arg, admin):
     from core import require_admin
 
+    if cmd == '/setup':
+        require_admin(admin)
+        rules = f"заданы, версия {s['version']}" if 'rules' in s else 'не заданы → /setrules текст'
+        faq = f"{len(s.get('faq',{}))} вопросов" if s.get('faq') else 'пуст → /faqadd вопрос | ответ'
+        welcome = 'включено' if s.get('welcome_enabled') is True else 'выключено → /welcomeon'
+        limit = s.get('command_limit',DEFAULT_LIMIT)
+        return (f'Настройки текущего чата\nПравила: {rules}\nFAQ: {faq}\nПриветствие: {welcome}'
+                f"\nПауза приветствий: {s.get('welcome_cooldown',30)} с → /welcomecooldown число"
+                f'\nЛимит команд участника: {limit} за минуту (0 — выключен) → /setlimit число'
+                '\nТекст приветствия: /welcome\nФактическую доставку проверьте в группе.')
+    if cmd in ('/setlimit','/welcomecooldown'):
+        require_admin(admin)
+        maximum = 120 if cmd == '/setlimit' else 86400
+        if not re.fullmatch(r'0|[1-9][0-9]{0,4}',arg) or int(arg)>maximum:
+            raise ValueError(f'Укажите целое число от 0 до {maximum}.')
+        if cmd == '/setlimit':
+            s['command_limit'] = int(arg)
+            return f'Лимит команд участника: {arg} за минуту. 0 отключает ограничение. Администраторы освобождены.'
+        s['welcome_cooldown'] = int(arg)
+        return f'Пауза между приветствиями: {arg} с. Вступления внутри паузы пропускаются без отложенной отправки.'
     if cmd == '/setrules':
         require_admin(admin)
         if not arg: raise ValueError('Добавьте текст правил.')

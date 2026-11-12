@@ -22,3 +22,5 @@ jobs:
           docker run --rm --network none -i --entrypoint python pushok-bot-ci - < smoke_container.py
           docker run --rm --network none -i --entrypoint python pushok-webhook-ci - webhook < smoke_container.py
           docker run --rm --network none --entrypoint gunicorn pushok-webhook-ci --version
+      - name: Offline HTTP webhook smoke
+        run: docker run --rm --network none -i --entrypoint python pushok-webhook-ci - < smoke_http.py

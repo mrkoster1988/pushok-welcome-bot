@@ -1,9 +1,11 @@
 """Общее для этого самостоятельного бота: транзакции и изоляция чатов."""
 import json
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from domain import handle, handle_join, HELP
+from guard import command_allowed, DEFAULT_LIMIT
 
 
 class UserError(Exception):
@@ -49,12 +51,14 @@ def listing(state, predicate=lambda x: True):
 
 
 class Service:
-    def __init__(self, path):
+    def __init__(self, path, clock=None):
+        self.clock = clock or time.time
         if path != ':memory:':
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.execute('CREATE TABLE IF NOT EXISTS chats (scope TEXT PRIMARY KEY, data TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS events (platform TEXT, id TEXT, PRIMARY KEY(platform,id))')
+        self.db.execute('CREATE TABLE IF NOT EXISTS transport_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
         self.db.execute('''CREATE TABLE IF NOT EXISTS outbox (
             platform TEXT, id TEXT, chat TEXT NOT NULL, user TEXT NOT NULL,
             reply TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
@@ -75,11 +79,16 @@ class Service:
                 return None
             row = self.db.execute('SELECT data FROM chats WHERE scope=?', (scope,)).fetchone()
             state = json.loads(row[0]) if row else {}
+            allowed,result = (True,None)
+            if kind == 'command' and not admin and platform != 'demo':
+                allowed,result = command_allowed(self.db,scope,str(user),state.get('command_limit',DEFAULT_LIMIT),self.clock())
             try:
-                if not isinstance(text, str) or len(text) > 3000:
+                if not allowed:
+                    pass
+                elif not isinstance(text, str) or len(text) > 3000:
                     raise ValueError('Команда должна быть не длиннее 3000 символов.')
-                if kind == 'join':
-                    result = handle_join(state)
+                elif kind == 'join':
+                    result = handle_join(state,self.clock())
                 else:
                     cmd, _, arg = text.strip().partition(' ')
                     result = HELP if cmd in ('/start', '/help') else handle(state, str(user), cmd.lower(), arg.strip(), admin)

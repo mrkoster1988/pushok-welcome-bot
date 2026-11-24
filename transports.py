@@ -14,6 +14,17 @@ class TransportError(RuntimeError):
     """Сообщение без токенов, URL запросов и ответов провайдера."""
 
 
+RESERVED_TELEGRAM_BOTS = frozenset(('pushok_app', 'mtproxy_pushok_bot'))
+
+
+def validate_specialized_bot(me):
+    """Verify Telegram identity before touching webhook or polling updates."""
+    if not isinstance(me, dict) or not isinstance(me.get('username'), str) or not me['username'].strip():
+        raise TransportError('Telegram: не удалось подтвердить имя бота.')
+    if me['username'].strip().lstrip('@').casefold() in RESERVED_TELEGRAM_BOTS:
+        raise TransportError('Telegram: центральный бот Pushok зарезервирован. Используйте отдельного бота.')
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise TransportError('API вернул перенаправление; запрос остановлен.')
@@ -112,6 +123,7 @@ class Telegram:
 
     def start(self):
         me = self.api('getMe', {})
+        validate_specialized_bot(me)
         hook = self.api('getWebhookInfo', {})
         if hook.get('url'):
             raise TransportError('Telegram: уже настроен webhook. Нужен отдельный бот без webhook.')
